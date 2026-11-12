@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baseball Counts & Batting Average Breakdown</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          colors: {
+            statcast: {
+              base: '#050B13',
+              card: '#0F1726',
+              cardAlt: '#121D2D',
+              border: '#1D2A3A',
+              glow: '#1E293B',
+              hitter: '#34D399',
+              hitterSoft: '#0F766E',
+              neutral: '#38BDF8',
+              neutralSoft: '#0F172A',
+              pitcher: '#FBBF24',
+              cliff: '#F87171',
+              cliffSoft: '#7F1D1D'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --bg: #050b13;
+      --card: #0f1726;
+      --card-alt: #121d2d;
+      --border: #1d2a3a;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --emerald: #34d399;
+      --cyan: #38bdf8;
+      --amber: #fbbf24;
+      --red: #f87171;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(52, 211, 153, 0.07), transparent 28%),
+        radial-gradient(circle at top right, rgba(56, 189, 248, 0.07), transparent 22%),
+        radial-gradient(circle at bottom center, rgba(248, 113, 113, 0.08), transparent 30%),
+        var(--bg);
+    }
+
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    ::-webkit-scrollbar-track { background: #050b13; }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    .glass {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .stat-card {
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(15, 23, 38, 0.9));
+    }
+
+    .glow-hitter { box-shadow: 0 0 32px -6px rgba(52, 211, 153, 0.45); }
+    .glow-neutral { box-shadow: 0 0 30px -8px rgba(56, 189, 248, 0.35); }
+    .glow-pitcher { box-shadow: 0 0 30px -8px rgba(251, 191, 36, 0.35); }
+    .glow-cliff { box-shadow: 0 0 30px -8px rgba(248, 113, 113, 0.45); }
+
+    .grid-cell {
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .grid-cell:hover {
+      transform: translateY(-1px);
+    }
+
+    .active-ring {
+      box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.8), 0 0 18px rgba(52, 211, 153, 0.15);
+    }
+
+    .chart-wrap canvas {
+      max-height: 100% !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen font-sans text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-100">
+
+  <aside aria-label="statcast ticker" class="glass border-b border-statcast-border/80 bg-slate-950/50 px-4 py-2 text-xs text-slate-400">
+    <div class="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Statcast Live Model
+        </span>
+        <span class="text-slate-600 hidden sm:inline">•</span>
+        <span>MLB Baseline BA: <strong class="text-slate-200">.248</strong></span>
+        <span class="text-slate-600">•</span>
+        <span>Baseline OBP: <strong class="text-slate-200">.318</strong></span>
+      </div>
+
+      <div class="flex items-center gap-3 text-[11px] font-mono">
+        <span class="hidden md:inline text-slate-400">Universal Leverage & Strategic Matrix</span>
+        <span class="rounded border border-slate-700 bg-slate-900/80 px-2 py-0.5 font-semibold text-emerald-300">180,000+ Plate Appearances</span>
+      </div>
+    </div>
+  </aside>
+
+  <header class="mx-auto max-w-7xl px-4 pb-6 pt-8 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-6 border-b border-statcast-border pb-6 md:flex-row md:items-end md:justify-between">
+      <div>
+        <div class="mb-3 flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+          <i data-lucide="crosshair" class="h-4 w-4"></i>
+          Tactical Count Dynamics & Probability Matrix
+        </div>
+
+        <h1 class="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">
+          Baseball Counts &amp; Batting Average Breakdown
+        </h1>
+
+        <p class="mt-3 max-w-2xl text-sm text-slate-400 sm:text-base">
+          Examine the stark offensive swing between hitter leverage and pitcher control,
+          tracking how plate geometry and batting average shift from
+          <span class="font-medium text-emerald-300">3-1 ambush</span> to the
+          <span class="font-medium text-red-300">0-2 cliff</span>.
+        </p>
+      </div>
+
+      <div class="flex flex-col items-start gap-2 self-start rounded-xl border border-statcast-border bg-statcast-card p-1.5 shadow-inner md:self-auto sm:flex-row">
+        <button id="btn-final" class="mode-btn inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-950 shadow-lg shadow-emerald-500/20 transition-all">
+          <i data-lucide="target" class="h-3.5 w-3.5"></i>
+          Final Pitch Splits
+        </button>
+        <button id="btn-trajectory" class="mode-btn inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-all hover:text-slate-100">
+          <i data-lucide="trending-up" class="h-3.5 w-3.5"></i>
+          At-Bat Trajectory
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl space-y-8 px-4 pb-16 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+      <section class="lg:col-span-7 rounded-2xl border border-statcast-border bg-statcast-card p-5 shadow-2xl sm:p-6">
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 class="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+              <i data-lucide="layout-grid" class="h-4 w-4 text-emerald-400"></i>
+              Interactive 4×3 Count Matrix
+            </h2>
+            <p class="mt-1 text-xs text-slate-400">
+              Click any count to inspect situational tendencies, decision pressure, and expected offense.
+            </p>
+          </div>
+
+          <div class="hidden items-center gap-2 text-[10px] font-mono sm:flex">
+            <span class="inline-flex items-center gap-1 text-emerald-400"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>Hitter</span>
+            <span class="inline-flex items-center gap-1 text-cyan-400"><span class="h-2 w-2 rounded-full bg-cyan-400"></span>Neutral</span>
+            <span class="inline-flex items-center gap-1 text-amber-400"><span class="h-2 w-2 rounded-full bg-amber-400"></span>Pitcher</span>
+            <span class="inline-flex items-center gap-1 text-red-400"><span class="h-2 w-2 rounded-full bg-red-400"></span>Cliff</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto pb-1">
+          <div class="min-w-[440px]">
+            <div class="mb-2 grid grid-cols-4 gap-2 text-center font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <div class="py-1 pl-2 text-left font-normal tracking-[0.12em] text-slate-500">Balls \ Strikes</div>
+              <div class="rounded border border-slate-800 bg-slate-800/30 py-1 text-slate-300">0 Strikes</div>
+              <div class="rounded border border-slate-800 bg-slate-800/30 py-1 text-slate-300">1 Strike</div>
+              <div class="rounded border border-red-900/40 bg-red-950/20 py-1 text-red-300">2 Strikes</div>
+            </div>
+
+            <div id="matrix-grid" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-statcast-border/70 pt-4 text-[11px] font-mono text-slate-400">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="info" class="h-3.5 w-3.5 text-slate-400"></i>
+            <span>Final Pitch BA identifies the hitter’s expected outcome at that plate state.</span>
+          </div>
+
+          <button id="jump-highest" class="font-medium text-emerald-300 transition-colors hover:text-emerald-200">
+            Jump to most dangerous count (3-1) →
+          </button>
+        </div>
+      </section>
+
+      <aside id="inspector" class="stat-card lg:col-span-5 rounded-2xl border border-statcast-border p-5 shadow-2xl sm:p-6">
+        <div class="mb-4 flex items-center justify-between border-b border-statcast-border/80 pb-4">
+          <div class="flex items-center gap-3">
+            <div id="insp-count-box" class="flex h-14 w-14 items-center justify-center rounded-xl border-2 text-2xl font-black font-mono glow-hitter text-emerald-400 bg-emerald-500/15 border-emerald-500/60">
+              3-1
+            </div>
+
+            <div>
+              <div class="mb-1 flex items-center gap-2">
+                <span id="insp-category-badge" class="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+                  Hitter's Advantage
+                </span>
+                <span id="insp-leverage-sub" class="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">Max Intent</span>
+              </div>
+              <h3 id="insp-title" class="text-lg font-bold text-white">The Pure Damage Count</h3>
+            </div>
+          </div>
+
+          <div class="text-right font-mono">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-slate-400">Leverage</div>
+            <div id="insp-li" class="text-lg font-bold text-emerald-300">2.4x</div>
+          </div>
+        </div>
+
+        <div class="mb-5 grid grid-cols-2 gap-3">
+          <div class="rounded-xl border border-statcast-border bg-slate-950/40 p-3.5">
+            <div class="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em] text-slate-400">
+              <span id="insp-avg-label">Final Pitch AVG</span>
+              <i data-lucide="gauge" class="h-3.5 w-3.5"></i>
+            </div>
+            <div id="insp-avg-val" class="mt-1 font-mono text-2xl font-black text-white sm:text-3xl">.364</div>
+            <div id="insp-avg-diff" class="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-300">
+              <i data-lucide="arrow-up-right" class="h-3 w-3"></i>
+              +116 pts above baseline
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-statcast-border bg-slate-950/40 p-3.5">
+            <div class="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em] text-slate-400">
+              <span>Eventual OBP</span>
+              <i data-lucide="shield-alert" class="h-3.5 w-3.5"></i>
+            </div>
+            <div id="insp-obp-val" class="mt-1 font-mono text-2xl font-black text-cyan-300 sm:text-3xl">.584</div>
+            <div id="insp-obp-sub" class="mt-1 text-[10px] text-slate-400">Walk or hit in ~58% of PAs</div>
+          </div>
+        </div>
+
+        <div class="mb-5 rounded-xl border border-statcast-border bg-slate-950/40 p-4">
+          <div class="mb-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em]">
+            <span class="flex items-center gap-1.5 font-semibold text-slate-200">
+              <i data-lucide="activity" class="h-3.5 w-3.5 text-emerald-300"></i>
+              Pitcher Expected Arsenal
+            </span>
+            <span id="insp-pitch-split" class="font-bold text-emerald-300">Fastball 71% | Secondary 29%</span>
+          </div>
+
+          <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div id="insp-bar-fb" class="h-full bg-emerald-500 transition-all duration-500" style="width:71%"></div>
+            <div id="insp-bar-sec" class="h-full bg-amber-500 transition-all duration-500" style="width:29%"></div>
+          </div>
+
+          <p id="insp-pitch-notes" class="mt-2.5 text-xs leading-relaxed text-slate-300">
+            Pitcher cannot surrender Ball 4. Secondary usage drops drastically to avoid walks; fastballs are grooved at peak rates.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-statcast-border bg-slate-950/40 p-4">
+          <div class="mb-3 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em]">
+            <span class="font-semibold text-slate-200">Hitter's Tactical Objective</span>
+            <span id="insp-zone-label" class="text-emerald-300">Zone: 6-Inch Sweet Spot</span>
+          </div>
+
+          <div class="flex items-start gap-3">
+            <div id="insp-zone-container" class="relative flex h-20 w-16 flex-shrink-0 items-center justify-center rounded-md border-2 border-dashed border-emerald-500/60 bg-emerald-500/10">
+              <div id="insp-zone-reticle" class="flex h-7 w-7 items-center justify-center rounded border border-emerald-400 bg-emerald-400/40 transition-all duration-300">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-300"></span>
+              </div>
+            </div>
+
+            <div>
+              <h4 id="insp-tactic-head" class="text-[11px] font-bold uppercase tracking-[0.16em] text-white">Ambush Dead-Red Fastball</h4>
+              <p id="insp-tactic-body" class="mt-1 text-xs leading-relaxed text-slate-300">
+                Do not expand. Hunt a fastball in your power zone and attack the pitch in front with intent.
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <section class="rounded-2xl border border-statcast-border bg-statcast-card p-5 shadow-xl lg:col-span-8 sm:p-6">
+        <div class="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <h2 class="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+              <i data-lucide="bar-chart-3" class="h-4 w-4 text-emerald-400"></i>
+              League-Wide Batting Average by Count
+            </h2>
+            <p class="mt-1 text-xs text-slate-400">
+              Comparing final-pitch batting average against the grim collapse at two strikes.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3 font-mono text-[11px]">
+            <span class="flex items-center gap-1.5 text-slate-300">
+              <span class="h-3 w-3 rounded-sm bg-emerald-500"></span> Final Pitch
+            </span>
+            <span class="flex items-center gap-1.5 text-slate-400">
+              <span class="h-3 w-3 rounded-sm bg-cyan-500/70"></span> Trajectory BA
+            </span>
+          </div>
+        </div>
+
+        <div class="chart-wrap relative h-72 w-full">
+          <canvas id="countsChart"></canvas>
+        </div>
+      </section>
+
+      <aside class="rounded-2xl border border-red-900/40 bg-gradient-to-br from-red-950/20 via-statcast-card to-statcast-card p-5 shadow-xl lg:col-span-4 sm:p-6">
+        <div class="flex items-center justify-between">
+          <span class="rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-red-300">
+            Statistical Phenomenon
+          </span>
+          <i data-lucide="trending-down" class="h-5 w-5 text-red-300"></i>
+        </div>
+
+        <h3 class="mt-3 text-xl font-black text-white">The Two-Strike Cliff</h3>
+        <p class="mt-2 text-xs leading-relaxed text-slate-300">
+          Offensive production does not decline gradually; it falls off a hard, brutal cliff once a hitter reaches two strikes.
+        </p>
+
+        <div class="mt-4 space-y-3 font-mono text-xs">
+          <div class="flex items-center justify-between rounded-lg border border-statcast-border bg-slate-950/50 p-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-400">0 &amp; 1 Strike Average</div>
+              <div class="text-lg font-bold text-emerald-300">.334</div>
+            </div>
+            <div class="text-right text-[10px] text-emerald-200">High driving intent</div>
+          </div>
+
+          <div class="flex items-center justify-between rounded-lg border border-red-900/40 bg-slate-950/50 p-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-400">2-Strike Average</div>
+              <div class="text-lg font-bold text-red-300">.172</div>
+            </div>
+            <div class="text-right text-[10px] text-red-200">-162 pt collapse</div>
+          </div>
+
+          <div class="flex items-center justify-between rounded-lg border border-statcast-border bg-slate-950/50 p-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-400">Strikeout Frequency</div>
+              <div class="text-lg font-bold text-amber-300">8.4x Higher</div>
+            </div>
+            <div class="text-right text-[10px] text-slate-400">Whiff rate triples</div>
+          </div>
+        </div>
+
+        <div class="mt-5 border-t border-red-900/30 pt-4 text-xs leading-normal text-slate-400">
+          <strong class="text-slate-200">The mechanical driver:</strong> with two strikes, hitters must protect the plate, kill the swing, and spoil tough breaking balls instead of looking for damage.
+        </div>
+      </aside>
+    </div>
+
+    <section class="rounded-2xl border border-statcast-border bg-statcast-card p-6 shadow-xl">
+      <div class="mb-4 flex items-center gap-2">
+        <i data-lucide="compass" class="h-5 w-5 text-emerald-400"></i>
+        <h2 class="text-lg font-bold text-white">Universal Hitting &amp; Pitching Principles Across Counts</h2>
+      </div>
+
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <article class="rounded-xl border border-statcast-border bg-slate-950/40 p-4 transition-colors hover:border-emerald-500/40">
+          <div class="mb-2 flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-emerald-300">
+            <span class="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15 text-xs">1</span>
+            Never Concede Pitch One
+          </div>
+          <h4 class="text-sm font-bold text-white">The first pitch is a hitter’s count.</h4>
+          <p class="mt-1.5 text-xs leading-relaxed text-slate-300">
+            First-pitch batting average (.334) rewards aggression. A fastball down the middle is a chance to set the tone and force the pitcher to throw from behind.
+          </p>
+        </article>
+
+        <article class="rounded-xl border border-statcast-border bg-slate-950/40 p-4 transition-colors hover:border-amber-500/40">
+          <div class="mb-2 flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-amber-300">
+            <span class="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15 text-xs">2</span>
+            The 1-1 Inflection Point
+          </div>
+          <h4 class="text-sm font-bold text-white">The fork in the road.</h4>
+          <p class="mt-1.5 text-xs leading-relaxed text-slate-300">
+            A 1-1 count is all about decisive contact. Winning the pitch pushes hitters to 2-1; losing it drops them into a 1-2 defensive posture.
+          </p>
+        </article>
+
+        <article class="rounded-xl border border-statcast-border bg-slate-950/40 p-4 transition-colors hover:border-red-500/40">
+          <div class="mb-2 flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-red-300">
+            <span class="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/15 text-xs">3</span>
+            Two-Strike Survival
+          </div>
+          <h4 class="text-sm font-bold text-white">Choke up, shorten the swing, spoil.</h4>
+          <p class="mt-1.5 text-xs leading-relaxed text-slate-300">
+            Swinging for power at 0-2 or 1-2 is a trap. The winning play is to shorten the zone, foul off tough pitches, and put the ball in play.
+          </p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const dataModel = {
+      '3-0': {
+        balls: 3, strikes: 0,
+        finalAvg: 0.382, trajAvg: 0.308, obp: 0.745,
+        label: 'Hitter’s Advantage',
+        category: 'Extreme Hitter Advantage',
+        colorClass: 'emerald',
+        li: '3.1x',
+        fb: 78, sec: 22,
+        title: 'Pitcher Emergency Mode',
+        pitchNotes: 'Pitchers cannot walk the hitter without risk. Fastballs are thrown in the heart of the zone with minimal hesitation.',
+        tacticHead: 'Strict Green Light / Auto-Take',
+        tacticBody: 'This is a nearly automatic take unless the pitcher makes a mistake over the middle. Attack only if it is a true fastball in the zone.',
+        zoneLabel: 'Zone: Center Square Only'
+      },
+      '3-1': {
+        balls: 3, strikes: 1,
+        finalAvg: 0.364, trajAvg: 0.294, obp: 0.584,
+        label: 'Prime Driving Count',
+        category: 'Prime Driving Count',
+        colorClass: 'emerald',
+        li: '2.4x',
+        fb: 71, sec: 29,
+        title: 'The Pure Damage Count',
+        pitchNotes: 'Pitchers cannot surrender Ball 4. Secondary usage drops dramatically; they lean on their best fastball in a hitter-friendly zone.',
+        tacticHead: 'Ambush Dead-Red Fastball',
+        tacticBody: 'Do not expand. Hunt a fastball in your power zone, look to put a barrel on the ball, and drive it with intent.',
+        zoneLabel: 'Zone: 6-Inch Sweet Spot'
+      },
+      '2-0': {
+        balls: 2, strikes: 0,
+        finalAvg: 0.346, trajAvg: 0.281, obp: 0.418,
+        label: 'Ambush Mode',
+        category: 'Hitter Leverage',
+        colorClass: 'emerald',
+        li: '1.9x',
+        fb: 67, sec: 33,
+        title: 'The Fastball Trap',
+        pitchNotes: 'Pitchers fall behind and continue to attack with heaters to avoid the full count.',
+        tacticHead: 'Hunt One Location',
+        tacticBody: 'Attack middle-in and look for one very specific fastball. Ignore the outer edge if it is not exactly where you want it.',
+        zoneLabel: 'Zone: Middle Quadrants'
+      },
+      '1-0': {
+        balls: 1, strikes: 0,
+        finalAvg: 0.338, trajAvg: 0.268, obp: 0.350,
+        label: 'Early Edge',
+        category: 'Modest Hitter Edge',
+        colorClass: 'neutral',
+        li: '1.2x',
+        fb: 58, sec: 42,
+        title: 'Early Baseline Advantage',
+        pitchNotes: 'The pitcher is trying to avoid falling behind. Strike frequency rises, but the hitter still has a clear lane to attack.',
+        tacticHead: 'Elevate & Drive',
+        tacticBody: 'Look for elevated fastballs and punish anything you can square up to the pull side or the gap.',
+        zoneLabel: 'Zone: 70% Plate Width'
+      },
+      '0-0': {
+        balls: 0, strikes: 0,
+        finalAvg: 0.334, trajAvg: 0.248, obp: 0.318,
+        label: 'Baseline Neutral',
+        category: 'Baseline Count',
+        colorClass: 'neutral',
+        li: '1.0x',
+        fb: 56, sec: 44,
+        title: 'First-Pitch Strategy',
+        pitchNotes: 'Pitchers are still throwing first-pitch strikes at near-normal rates. Establish the zone before anything else.',
+        tacticHead: 'Attack First-Pitch Strikes',
+        tacticBody: 'Losing strike one is not ideal. Attack early fastballs in the zone and avoid chasing pitches outside your sweet spot.',
+        zoneLabel: 'Zone: Standard Strike Zone'
+      },
+      '2-1': {
+        balls: 2, strikes: 1,
+        finalAvg: 0.332, trajAvg: 0.262, obp: 0.358,
+        label: 'Controlled Advantage',
+        category: 'Controlled Advantage',
+        colorClass: 'emerald',
+        li: '1.4x',
+        fb: 59, sec: 41,
+        title: 'Controlled Aggression',
+        pitchNotes: 'The pitcher wants a strike, but the hitter can still dictate terms with a well-placed swing.',
+        tacticHead: 'Drive Quality Strikes',
+        tacticBody: 'Stay balanced and focus on breaking-ball recognition. Attack the fastball only if it is in the preferred zone.',
+        zoneLabel: 'Zone: In-Zone Core'
+      },
+      '1-1': {
+        balls: 1, strikes: 1,
+        finalAvg: 0.318, trajAvg: 0.236, obp: 0.302,
+        label: 'Crossroads Count',
+        category: 'The Crossroads',
+        colorClass: 'neutral',
+        li: '1.6x',
+        fb: 48, sec: 52,
+        title: 'The Great Crossroads',
+        pitchNotes: 'Secondary pitches start to dominate the conversation. The hitter must be patient and disciplined.',
+        tacticHead: 'Anticipate Breaking Ball',
+        tacticBody: 'Do not chase movement or expand the zone. Let the pitch come to your body, then commit to a well-timed swing.',
+        zoneLabel: 'Zone: Strict 17 Inches'
+      },
+      '0-1': {
+        balls: 0, strikes: 1,
+        finalAvg: 0.312, trajAvg: 0.219, obp: 0.278,
+        label: 'Pitcher Edge',
+        category: 'Pitcher Leverage',
+        colorClass: 'pitcher',
+        li: '1.3x',
+        fb: 49, sec: 51,
+        title: 'Expanding the Corners',
+        pitchNotes: 'The pitcher can exploit the corners and use low, late movement to create uncomfortable swings.',
+        tacticHead: 'Stay Selective',
+        tacticBody: 'Do not chase away from the zone. Make the pitcher execute the pitch and fight for a favorable result.',
+        zoneLabel: 'Zone: Standard Plate'
+      },
+      '3-2': {
+        balls: 3, strikes: 2,
+        finalAvg: 0.218, trajAvg: 0.218, obp: 0.476,
+        label: 'Full Count',
+        category: 'All-Or-Nothing Showdown',
+        colorClass: 'pitcher',
+        li: '2.8x',
+        fb: 54, sec: 46,
+        title: 'Maximum Pressure Standoff',
+        pitchNotes: 'The pressure is maximal for both sides. The pitcher wants a quick decision; the hitter wants a chase-triggering mistake.',
+        tacticHead: 'Protect Edges & Spoil',
+        tacticBody: 'Fight off the tough pitch and take the walk if the zone is obviously missed. Protect the plate, then attack in your comfort zone.',
+        zoneLabel: 'Zone: Full Plate + Corners'
+      },
+      '2-2': {
+        balls: 2, strikes: 2,
+        finalAvg: 0.188, trajAvg: 0.188, obp: 0.285,
+        label: 'Two-Strike Battle',
+        category: 'Two-Strike Battle',
+        colorClass: 'cliff',
+        li: '1.7x',
+        fb: 45, sec: 55,
+        title: 'The Expansion Trap',
+        pitchNotes: 'The pitcher can extend the field with breaking balls and keep the hitter uncomfortable for long stretches.',
+        tacticHead: 'Shorten Up & Battle',
+        tacticBody: 'Choke up, shorten the swing, and make contact. Avoid trying to hit the ball with maximum force.',
+        zoneLabel: 'Zone: Expanded Coverage'
+      },
+      '1-2': {
+        balls: 1, strikes: 2,
+        finalAvg: 0.164, trajAvg: 0.164, obp: 0.214,
+        label: 'Severe Cliff',
+        category: 'High Whiff Risk',
+        colorClass: 'cliff',
+        li: '1.9x',
+        fb: 40, sec: 60,
+        title: 'Wipeout Pitch Incoming',
+        pitchNotes: 'Pitchers throw structure-breaking secondary pitches and look for weak contact or a swing and miss.',
+        tacticHead: 'Let Ball Travel Deep',
+        tacticBody: 'Spoil tough pitches with foul balls. Everyone knows the goal is not swing-and-miss; it is survival and contact.',
+        zoneLabel: 'Zone: 17 Inches + Chase'
+      },
+      '0-2': {
+        balls: 0, strikes: 2,
+        finalAvg: 0.148, trajAvg: 0.148, obp: 0.192,
+        label: 'Survival Mode',
+        category: 'Extreme Pitcher Dominance',
+        colorClass: 'cliff',
+        li: '2.1x',
+        fb: 35, sec: 65,
+        title: 'Pure Survival Mode',
+        pitchNotes: 'Pitchers throw away from the zone and challenge the hitter to expand. Defensive contact becomes the objective.',
+        tacticHead: 'Emergency Contact Focus',
+        tacticBody: 'Shorten everything. Protect the plate, get the ball through the infield, and turn contact into a successful outcome.',
+        zoneLabel: 'Zone: Total Plate Defense'
+      }
+    };
+
+    const chartOrder = ['3-0', '3-1', '2-0', '1-0', '0-0', '2-1', '1-1', '0-1', '3-2', '2-2', '1-2', '0-2'];
+    let state = { activeCount: '3-1', mode: 'final' };
+
+    function asBa(value) {
+      const s = value.toFixed(3).replace(/^0+/, '');
+      return s === '.000' ? '.000' : s;
+    }
+
+    function renderMatrix() {
+      const container = document.getElementById('matrix-grid');
+      container.innerHTML = '';
+
+      const ballsOrder = [3, 2, 1, 0];
+      const strikesOrder = [0, 1, 2];
+
+      ballsOrder.forEach((balls) => {
+        const row = document.createElement('div');
+        row.className = 'grid grid-cols-4 gap-2';
+
+        const label = document.createElement('div');
+        label.className = 'flex items-center gap-2 pl-2 font-mono text-xs font-bold text-slate-400';
+        label.innerHTML = `
+          <span class="h-2 w-2 rounded-full ${balls >= 2 ? 'bg-emerald-400' : 'bg-slate-600'}"></span>
+          ${balls} Ball${balls === 1 ? '' : 's'}
+        `;
+        row.appendChild(label);
+
+        strikesOrder.forEach((strikes) => {
+          const key = `${balls}-${strikes}`;
+          const meta = dataModel[key];
+          const isSelected = key === state.activeCount;
+
+          const toneClasses = {
+            emerald: 'border-emerald-500/25 bg-emerald-950/20 text-emerald-300 hover:border-emerald-500/60',
+            neutral: 'border-cyan-500/25 bg-cyan-950/20 text-cyan-300 hover:border-cyan-500/60',
+            pitcher: 'border-amber-500/25 bg-amber-950/20 text-amber-300 hover:border-amber-500/60',
+            cliff: 'border-red-500/25 bg-red-950/20 text-red-300 hover:border-red-500/60'
+          };
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `grid-cell flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${toneClasses[meta.colorClass]} ${isSelected ? 'active-ring border-emerald-400 ring-2 ring-emerald-500/25' : ''}`;
+          button.setAttribute('aria-label', `Inspect ${key} count`);
+
+          button.onclick = () => selectCount(key);
+
+          const value = state.mode === 'final' ? meta.finalAvg : meta.trajAvg;
+
+          button.innerHTML = `
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <span class="font-mono text-[10px] font-bold text-slate-100">${key}</span>
+              <span class="rounded border border-slate-700 bg-slate-900/60 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-slate-200">
+                ${meta.label}
+              </span>
+            </div>
+            <div class="flex items-end justify-between">
+              <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400">${state.mode === 'final' ? 'Final' : 'Tray'}</span>
+              <span class="font-mono text-base font-black">${asBa(value)}</span>
+            </div>
+          `;
+
+          row.appendChild(button);
+        });
+
+        container.appendChild(row);
+      });
+    }
+
+    function updateInspector(key) {
+      const d = dataModel[key];
+      if (!d) return;
+
+      state.activeCount = key;
+
+      const countBox = document.getElementById('insp-count-box');
+      countBox.textContent = key;
+
+      const badge = document.getElementById('insp-category-badge');
+      badge.textContent = d.category;
+
+      document.getElementById('insp-leverage-sub').textContent = d.li;
+      document.getElementById('insp-title').textContent = d.title;
+      document.getElementById('insp-li').textContent = d.li;
+
+      const selectedAvg = state.mode === 'final' ? d.finalAvg : d.trajAvg;
+      document.getElementById('insp-avg-val').textContent = asBa(selectedAvg);
+      document.getElementById('insp-avg-label').textContent = state.mode === 'final' ? 'Final Pitch AVG' : 'Eventual At-Bat AVG';
+
+      const baselineDelta = Math.round((selectedAvg - 0.248) * 1000);
+
+      const diffNode = document.getElementById('insp-avg-diff');
+      if (baselineDelta >= 0) {
+        diffNode.innerHTML = `<i data-lucide="arrow-up-right" class="h-3 w-3"></i> +${baselineDelta} pts above baseline`;
+        diffNode.className = 'mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-300';
+      } else {
+        diffNode.innerHTML = `<i data-lucide="arrow-down-right" class="h-3 w-3"></i> ${baselineDelta} pts below baseline`;
+        diffNode.className = 'mt-1 flex items-center gap-1 text-[10px] font-medium text-red-300';
+      }
+
+      document.getElementById('insp-obp-val').textContent = asBa(d.obp);
+      document.getElementById('insp-obp-sub').textContent = `Walk or hit in ~${(d.obp * 100).toFixed(0)}% of PAs`;
+
+      document.getElementById('insp-pitch-split').textContent = `Fastball ${d.fb}% | Secondary ${d.sec}%`;
+      document.getElementById('insp-bar-fb').style.width = `${d.fb}%`;
+      document.getElementById('insp-bar-sec').style.width = `${d.sec}%`;
+      document.getElementById('insp-pitch-notes').textContent = d.pitchNotes;
+
+      document.getElementById('insp-zone-label').textContent = d.zoneLabel;
+      document.getElementById('insp-tactic-head').textContent = d.tacticHead;
+      document.getElementById('insp-tactic-body').textContent = d.tacticBody;
+
+      const countBoxClasses = {
+        emerald: 'glow-hitter text-emerald-400 bg-emerald-500/15 border-emerald-500/60',
+        neutral: 'glow-neutral text-cyan-400 bg-cyan-500/15 border-cyan-500/60',
+        pitcher: 'glow-pitcher text-amber-400 bg-amber-500/15 border-amber-500/60',
+        cliff: 'glow-cliff text-red-400 bg-red-500/15 border-red-500/60'
+      };
+
+      countBox.className = `flex h-14 w-14 items-center justify-center rounded-xl border-2 text-2xl font-black font-mono ${countBoxClasses[d.colorClass]}`;
+
+      const badgeClasses = {
+        emerald: 'rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300',
+        neutral: 'rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300',
+        pitcher: 'rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300',
+        cliff: 'rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-red-300'
+      };
+
+      badge.className = badgeClasses[d.colorClass];
+
+      const reticle = document.getElementById('insp-zone-reticle');
+      const container = document.getElementById('insp-zone-container');
+
+      if (d.strikes === 2) {
+        reticle.className = 'flex h-12 w-12 items-center justify-center rounded border border-red-400 bg-red-400/20 transition-all duration-300';
+        container.className = 'relative flex h-20 w-16 flex-shrink-0 items-center justify-center rounded-md border-2 border-dashed border-red-500/60 bg-red-500/10';
+      } else if (d.balls >= 2 && d.strikes <= 1) {
+        reticle.className = 'flex h-7 w-7 items-center justify-center rounded border border-emerald-400 bg-emerald-400/40 transition-all duration-300';
+        container.className = 'relative flex h-20 w-16 flex-shrink-0 items-center justify-center rounded-md border-2 border-dashed border-emerald-500/60 bg-emerald-500/10';
+      } else {
+        reticle.className = 'flex h-9 w-9 items-center justify-center rounded border border-cyan-400 bg-cyan-400/30 transition-all duration-300';
+        container.className = 'relative flex h-20 w-16 flex-shrink-0 items-center justify-center rounded-md border-2 border-dashed border-cyan-500/60 bg-cyan-500/10';
+      }
+
+      lucide.createIcons();
+    }
+
+    function selectCount(key) {
+      state.activeCount = key;
+      renderMatrix();
+      updateInspector(key);
+
+      if (chartInstance) {
+        const idx = chartOrder.indexOf(key);
+        if (idx >= 0) {
+          chartInstance.setActiveElements([{ datasetIndex: 0, index: idx }]);
+          chartInstance.tooltip.setActiveElements([{ datasetIndex: 0, index: idx }], { x: 0, y: 0 });
+          chartInstance.update();
+        }
+      }
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+
+      const finalBtn = document.getElementById('btn-final');
+      const trajBtn = document.getElementById('btn-trajectory');
+
+      if (mode === 'final') {
+        finalBtn.className = 'mode-btn inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-950 shadow-lg shadow-emerald-500/20 transition-all';
+        trajBtn.className = 'mode-btn inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-all hover:text-slate-100';
+      } else {
+        trajBtn.className = 'mode-btn inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-950 shadow-lg shadow-emerald-500/20 transition-all';
+        finalBtn.className = 'mode-btn inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-all hover:text-slate-100';
+      }
+
+      renderMatrix();
+      updateInspector(state.activeCount);
+
+      if (chartInstance) {
+        chartInstance.update();
+      }
+    }
+
+    let chartInstance = null;
+
+    function initChart() {
+      const ctx = document.getElementById('countsChart').getContext('2d');
+
+      const finalData = chartOrder.map((key) => dataModel[key].finalAvg);
+      const trajectoryData = chartOrder.map((key) => dataModel[key].trajAvg);
+
+      const colors = chartOrder.map((key) => {
+        const d = dataModel[key];
+        if (d.strikes === 2) return 'rgba(248, 113, 113, 0.9)';
+        if (d.balls > d.strikes) return 'rgba(52, 211, 153, 0.9)';
+        return 'rgba(56, 189, 248, 0.8)';
+      });
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: chartOrder,
+          datasets: [
+            {
+              label: 'Final Pitch BA',
+              data: finalData,
+              backgroundColor: colors,
+              borderRadius: 8,
+              borderSkipped: false,
+              barPercentage: 0.78,
+              categoryPercentage: 0.85
+            },
+            {
+              label: 'Trajectory BA',
+              data: trajectoryData,
+              type: 'line',
+              borderColor: '#38BDF8',
+              backgroundColor: 'rgba(56, 189, 248, 0.12)',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#38BDF8',
+              pointBorderColor: '#0F1726',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 5,
+              tension: 0.32,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          animation: {
+            duration: 650,
+            easing: 'easeOutQuart'
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111827',
+              titleColor: '#F8FAFC',
+              bodyColor: '#CBD5E1',
+              borderColor: '#1E293B',
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                label: function(context) {
+                  const label = context.dataset.label || '';
+                  const value = context.parsed.y;
+                  return `${label}: .${(value * 1000).toFixed(0)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              min: 0.1,
+              max: 0.42,
+              grid: { color: 'rgba(148, 163, 184, 0.15)' },
+              ticks: {
+                color: '#94A3B8',
+                callback: function(v) { return '.' + (v * 1000).toFixed(0); },
+                font: { family: 'JetBrains Mono', size: 10 }
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: '#94A3B8',
+                font: { family: 'JetBrains Mono', size: 10, weight: 'bold' }
+              }
+            }
+          },
+          onClick: (evt, activeElements) => {
+            if (activeElements && activeElements.length > 0) {
+              const idx = activeElements[0].index;
+              if (idx !== undefined) selectCount(chartOrder[idx]);
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById('btn-final').addEventListener('click', () => setMode('final'));
+    document.getElementById('btn-trajectory').addEventListener('click', () => setMode('trajectory'));
+    document.getElementById('jump-highest').addEventListener('click', () => selectCount('3-1'));
+
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      renderMatrix();
+      updateInspector(state.activeCount);
+      initChart();
+    });
+  </script>
+</body>
+</html>
